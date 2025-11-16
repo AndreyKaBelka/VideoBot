@@ -3,7 +3,6 @@ package main
 import (
 	"VideoBot/handler"
 	"context"
-	"io"
 	"log"
 	"log/slog"
 	"os"
@@ -49,12 +48,22 @@ func loggerMiddleware(next bot.HandlerFunc) bot.HandlerFunc {
 
 func defaultHandler(ctx context.Context, b *bot.Bot, update *models.Update) {
 	if update.Message != nil {
-		videoCh := make(chan io.ReadCloser)
+		videoCh := make(chan string)
+		defer close(videoCh)
 		webDriver, err := handler.NewInstagramDownloader()
 		if err != nil {
 			slog.Error("Не удалось создать вебДрайвер", "error", err)
 		}
+		defer webDriver.Close()
 		link := update.Message.Text
+
+		_, err = b.SendMessage(ctx, &bot.SendMessageParams{
+			ChatID: update.Message.Chat.ID,
+			Text:   "Начал загрузку видео...",
+		})
+		if err != nil {
+			slog.Error("Не смог отправить сообщение", "error", err)
+		}
 
 		go func() {
 			data, err := webDriver.StartDownloadReel(link, "test.mp4")
@@ -63,17 +72,11 @@ func defaultHandler(ctx context.Context, b *bot.Bot, update *models.Update) {
 			}
 			videoCh <- data
 		}()
-		b.SendMessage(ctx, &bot.SendMessageParams{
-			ChatID: update.Message.Chat.ID,
-			Text:   "Начал загрузку видео...",
-		})
 		video := <-videoCh
-		defer video.Close()
 		_, err = b.SendVideo(ctx, &bot.SendVideoParams{
 			ChatID: update.Message.Chat.ID,
-			Video: &models.InputFileUpload{
-				Filename: "Test.mp4",
-				Data:     video,
+			Video: &models.InputFileString{
+				Data: video,
 			},
 		})
 		if err != nil {

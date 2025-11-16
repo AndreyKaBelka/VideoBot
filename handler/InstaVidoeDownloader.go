@@ -1,11 +1,11 @@
 package handler
 
 import (
-	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -40,13 +40,11 @@ func (id *InstagramDownloader) Close() {
 	}
 }
 
-func (id *InstagramDownloader) StartDownloadReel(reelURL, filename string) (io.ReadCloser, error) {
+func (id *InstagramDownloader) StartDownloadReel(reelURL, filename string) (string, error) {
 	// Переходим на страницу рила
 	if err := id.wd.Get(reelURL); err != nil {
-		return nil, err
+		return "", err
 	}
-
-	defer id.Close()
 
 	err := id.wd.WaitWithTimeout(func(driver selenium.WebDriver) (bool, error) {
 		scripts, _ := driver.FindElements(selenium.ByXPATH, "//script[contains(., 'video_versions')]")
@@ -57,27 +55,27 @@ func (id *InstagramDownloader) StartDownloadReel(reelURL, filename string) (io.R
 	}, 30*time.Second)
 
 	if err != nil {
-		return nil, fmt.Errorf("не удалось загрузить видео элемент: %v", err)
+		return "", fmt.Errorf("не удалось загрузить видео элемент: %v", err)
 	}
 
 	// Ищем видео элемент
 	script, err := id.wd.FindElement(selenium.ByXPATH, "//script[contains(., 'video_versions')]")
 	if err != nil {
-		return nil, fmt.Errorf("не удалось загрузить видео элемент: %v", err)
+		return "", fmt.Errorf("не удалось загрузить видео элемент: %v", err)
 	}
 
 	jsonObj, err := id.FireScript(script)
 	if err != nil {
-		return nil, fmt.Errorf("не удалось загрузить видео элемент: %v", err)
+		return "", fmt.Errorf("не удалось загрузить видео элемент: %v", err)
 	}
 
 	videoURL, err := extractVideoURLFromJSON(jsonObj)
 	slog.Info("Получил ссылку на скачивание", "link", videoURL)
 	if err != nil {
-		return nil, fmt.Errorf("не удалось загрузить видео элемент: %v", err)
+		return "", fmt.Errorf("не удалось загрузить видео элемент: %v", err)
 	}
 
-	return id.downloadVideo(videoURL, filename)
+	return videoURL, nil
 }
 
 func (id *InstagramDownloader) downloadVideo(videoURL, filename string) (io.ReadCloser, error) {
@@ -119,19 +117,11 @@ func extractVideoURLFromJSON(result interface{}) (string, error) {
 		return "", fmt.Errorf("неверный формат данных")
 	}
 
-	var data map[string]interface{}
-	if err := json.Unmarshal([]byte(jsonStr), &data); err != nil {
-		return "", err
-	}
+	re := regexp.MustCompile(`(?m)"video_versions":\[\{[^}]*"url":"(https?:\\/\\/[^"]+)"`)
 
-	// Используем безопасное извлечение с проверками
-	videoURL, err := getNestedString(data, "require", "0", "3", "0", "__bbox", "require", "0", "3", "1", "__bbox", "result", "data", "xdt_api__v1__media__shortcode__web_info", "items", "0", "video_versions", "0", "url")
+	videoURL := re.FindStringSubmatch(jsonStr)
 
-	if err != nil {
-		return "", err
-	}
-
-	return strings.ReplaceAll(videoURL, `\/`, `/`), nil
+	return strings.ReplaceAll(videoURL[1], `\/`, `/`), nil
 }
 
 // Вспомогательная функция для безопасного извлечения вложенных данных
