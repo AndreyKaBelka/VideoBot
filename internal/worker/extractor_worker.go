@@ -5,7 +5,6 @@ import (
 	link2 "VideoBot/internal/link"
 	"VideoBot/internal/taskqueue"
 	"context"
-	"fmt"
 	"log/slog"
 
 	"github.com/riverqueue/river"
@@ -44,7 +43,8 @@ func (w *DownloadWorker) Work(ctx context.Context, job *river.Job[taskqueue.Link
 	}
 
 	if err != nil {
-		return fmt.Errorf("не смог взять ссылку: %w", err)
+		w.logger.Error("Чтото случилось", "err", err)
+		return nil
 	}
 
 	err = w.producer.SendCdnUrl(ctx, taskqueue.CdnUrlArgs{
@@ -52,7 +52,8 @@ func (w *DownloadWorker) Work(ctx context.Context, job *river.Job[taskqueue.Link
 		ChatID: link.ChatId(),
 	})
 	if err != nil {
-		return fmt.Errorf("не смог отправить ссылку: %w", err)
+		w.logger.Error("Чтото случилось", "err", err)
+		return nil
 	}
 	return nil
 }
