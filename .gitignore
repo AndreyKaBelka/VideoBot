@@ -1,4 +1,4 @@
-/.env
+/configs/.env
 /go.sum
 /VideoBot.iml
 /.idea/

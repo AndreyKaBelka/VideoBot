@@ -1,0 +1,11 @@
+FROM golang:1.25-alpine AS build
+
+ARG RIVER_VERSION=v0.44.0
+RUN go install github.com/riverqueue/river/cmd/river@${RIVER_VERSION}
+
+FROM alpine:3.20
+
+RUN apk add --no-cache ca-certificates
+COPY --from=build /go/bin/river /usr/local/bin/river
+
+ENTRYPOINT ["river"]
