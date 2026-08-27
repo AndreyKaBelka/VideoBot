@@ -1,17 +1,6 @@
 services:
-  tun2socks:
-    image: xjasonlyu/tun2socks:latest
-    cap_add:
-      - NET_ADMIN
-    devices:
-      - /dev/net/tun
-    environment:
-      - PROXY=socks5://172.17.0.1:20170
-    restart: unless-stopped
-
   app:
     build: .
-    network_mode: "service:tun2socks"
     depends_on:
       db:
         condition: service_healthy
@@ -19,8 +8,6 @@ services:
         condition: service_completed_successfully
       river-migrate:
         condition: service_completed_successfully
-      tun2socks:
-        condition: service_started
     environment:
       DB_HOST: db
       DB_PORT: 5432
@@ -76,18 +63,14 @@ services:
       DB_USER: ${POSTGRES_USER:-videobot}
       DB_PASSWORD: ${POSTGRES_PASSWORD:-videobot}
       DB_NAME: ${POSTGRES_DB:-videobot}
-      SELENIUM_URL: http://tun2socks:4444/wd/hub
+      SELENIUM_URL: http://selenium:4444/wd/hub
     restart: unless-stopped
 
   selenium:
     image: seleniarm/standalone-firefox:latest
-    network_mode: "service:tun2socks"
     shm_size: 512m
     mem_limit: 700m
     cpus: 1.5
-    depends_on:
-      tun2socks:
-        condition: service_started
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:4444/wd/hub/status"]
       interval: 10s

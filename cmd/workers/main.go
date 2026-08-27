@@ -13,7 +13,6 @@ import (
 
 	"github.com/joho/godotenv"
 	"github.com/riverqueue/river"
-	"github.com/tebeka/selenium"
 )
 
 func main() {
@@ -48,17 +47,12 @@ func run(logger *slog.Logger) error {
 	}
 	defer pool.Close()
 
-	caps := selenium.Capabilities{
-		"browserName": "firefox",
-	}
-
 	seleniumURL := os.Getenv("SELENIUM_URL")
 
-	wd, err := selenium.NewRemote(caps, seleniumURL)
+	wd, err := platform.NewDriver(seleniumURL)
 	if err != nil {
-		return fmt.Errorf("не удалось запустить WebDriver: %v", err)
+		return fmt.Errorf("create webdriver: %w", err)
 	}
-
 	defer wd.Quit()
 
 	downloaderService := downloader.NewDownloader(wd, logger)
