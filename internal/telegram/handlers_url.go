@@ -17,7 +17,7 @@ func (h *Handler) HandleUrl(ctx context.Context, b *bot.Bot, update *models.Upda
 		return
 	}
 
-	lnk, err := link.NewLink(update)
+	lnk, err := link.NewLink(update.Message.Text, update.Message.Chat.ID)
 	if err != nil {
 		h.handleLinkError(ctx, b, update, err)
 		return

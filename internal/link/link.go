@@ -1,12 +1,11 @@
 package link
 
 import (
-	"VideoBot/internal/taskqueue"
 	"errors"
+	"fmt"
 	"regexp"
 	"strings"
 
-	"github.com/go-telegram/bot/models"
 	"github.com/google/uuid"
 )
 
@@ -20,10 +19,30 @@ func (t Type) Int() int {
 	return int(t)
 }
 
+// TypeFromInt восстанавливает тип из числового представления (БД, очередь).
+func TypeFromInt(v int) (Type, error) {
+	switch Type(v) {
+	case INSTA:
+		return INSTA, nil
+	default:
+		return 0, fmt.Errorf("%w: %d", ErrUnknownType, v)
+	}
+}
+
 type ID uuid.UUID
 
 func (id ID) String() string {
 	return uuid.UUID(id).String()
+}
+
+// ParseID восстанавливает идентификатор из строкового представления.
+func ParseID(s string) (ID, error) {
+	parsed, err := uuid.Parse(s)
+	if err != nil {
+		return ID{}, fmt.Errorf("разобрать id ссылки: %w", err)
+	}
+
+	return ID(parsed), nil
 }
 
 type Link struct {
@@ -52,47 +71,48 @@ func (l *Link) ChatId() int64 {
 var ErrNotSupported = errors.New("not supported link")
 var ErrEmptyLink = errors.New("empty link")
 var ErrTooLongLink = errors.New("too long link")
+var ErrUnknownType = errors.New("unknown link type")
 
 const maxLinkLength = 200
 
-func NewLink(message *models.Update) (Link, error) {
-	link := strings.TrimSpace(message.Message.Text)
-	chatId := message.Message.Chat.ID
+// NewLink создаёт новую ссылку из текста сообщения пользователя.
+func NewLink(rawURL string, chatID int64) (Link, error) {
+	url := strings.TrimSpace(rawURL)
 
-	if link == "" {
+	if url == "" {
 		return Link{}, ErrEmptyLink
 	}
 
-	if len(link) > maxLinkLength {
+	if len(url) > maxLinkLength {
 		return Link{}, ErrTooLongLink
 	}
 
-	return getLinkWithType(link, chatId)
-}
-
-func NewLinkFromArgs(args taskqueue.LinkJobArgs) Link {
-	return Link{
-		id:       ID(uuid.MustParse(args.ID)),
-		link:     args.URL,
-		linkType: Type(args.LinkType),
-		chatId:   args.ChatID,
+	if !isInstagramURL(url) {
+		return Link{}, ErrNotSupported
 	}
-}
 
-func getLinkWithType(link string, chatId int64) (Link, error) {
 	id, err := uuid.NewV7()
 	if err != nil {
-		return Link{}, err
+		return Link{}, fmt.Errorf("сгенерировать id ссылки: %w", err)
 	}
-	if isInstagramURL(link) {
-		return Link{
-			id:       ID(id),
-			link:     link,
-			linkType: INSTA,
-			chatId:   chatId,
-		}, nil
+
+	return Link{
+		id:       ID(id),
+		link:     url,
+		linkType: INSTA,
+		chatId:   chatID,
+	}, nil
+}
+
+// Restore собирает ссылку из уже сохранённого состояния — из очереди или БД,
+// минуя проверки, которые она прошла при создании.
+func Restore(id ID, rawURL string, linkType Type, chatID int64) Link {
+	return Link{
+		id:       id,
+		link:     rawURL,
+		linkType: linkType,
+		chatId:   chatID,
 	}
-	return Link{}, ErrNotSupported
 }
 
 func isInstagramURL(url string) bool {

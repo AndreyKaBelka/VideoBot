@@ -2,7 +2,7 @@ package worker
 
 import (
 	"VideoBot/internal/downloader"
-	link2 "VideoBot/internal/link"
+	"VideoBot/internal/link"
 	"VideoBot/internal/taskqueue"
 	"context"
 	"log/slog"
@@ -15,7 +15,7 @@ type JobProducer interface {
 }
 
 type Extractor interface {
-	ExtractCdnUrlFromInsta(ctx context.Context, link link2.Link) (downloader.CdnUrl, error)
+	ExtractCdnUrlFromInsta(ctx context.Context, lnk link.Link) (downloader.CdnUrl, error)
 }
 
 type DownloadWorker struct {
@@ -30,37 +30,58 @@ func NewDownloadWorker(logger *slog.Logger, extractor Extractor, producer JobPro
 }
 
 func (w *DownloadWorker) Work(ctx context.Context, job *river.Job[taskqueue.LinkJobArgs]) error {
-	link := link2.NewLinkFromArgs(job.Args)
-
-	if link.LinkType() != link2.INSTA {
-		w.logger.Error("Неподдерживаемый тип ссылки", "type", link.LinkType().Int())
-		if err := w.producer.SendCdnUrl(ctx, taskqueue.CdnUrlArgs{
-			ChatID: link.ChatId(),
-			Error:  link2.ErrNotSupported.Error(),
-		}); err != nil {
-			w.logger.Error("Чтото случилось", "err", err)
-		}
+	lnk, err := linkFromArgs(job.Args)
+	if err != nil {
+		w.logger.Error("Не смог собрать ссылку из джобы", "err", err)
+		w.reportError(ctx, job.Args.ChatID, link.ErrNotSupported.Error())
 		return nil
 	}
 
-	videoUrl, err := w.extractor.ExtractCdnUrlFromInsta(ctx, link)
+	if lnk.LinkType() != link.INSTA {
+		w.logger.Error("Неподдерживаемый тип ссылки", "type", lnk.LinkType().Int())
+		w.reportError(ctx, lnk.ChatId(), link.ErrNotSupported.Error())
+		return nil
+	}
 
+	videoUrl, err := w.extractor.ExtractCdnUrlFromInsta(ctx, lnk)
 	if err != nil {
 		w.logger.Error("Чтото случилось", "err", err)
-		err = w.producer.SendCdnUrl(ctx, taskqueue.CdnUrlArgs{
-			ChatID: link.ChatId(),
-			Error:  err.Error(),
-		})
+		w.reportError(ctx, lnk.ChatId(), err.Error())
 		return nil
 	}
 
-	err = w.producer.SendCdnUrl(ctx, taskqueue.CdnUrlArgs{
+	if err := w.producer.SendCdnUrl(ctx, taskqueue.CdnUrlArgs{
 		CdnUrl: videoUrl.String(),
-		ChatID: link.ChatId(),
-	})
-	if err != nil {
+		ChatID: lnk.ChatId(),
+	}); err != nil {
 		w.logger.Error("Чтото случилось", "err", err)
 		return nil
 	}
+
 	return nil
+}
+
+func (w *DownloadWorker) reportError(ctx context.Context, chatID int64, msg string) {
+	if err := w.producer.SendCdnUrl(ctx, taskqueue.CdnUrlArgs{
+		ChatID: chatID,
+		Error:  msg,
+	}); err != nil {
+		w.logger.Error("Чтото случилось", "err", err)
+	}
+}
+
+// linkFromArgs переводит DTO очереди в доменную ссылку — маппинг живёт здесь,
+// чтобы домен ничего не знал о формате джобы.
+func linkFromArgs(args taskqueue.LinkJobArgs) (link.Link, error) {
+	id, err := link.ParseID(args.ID)
+	if err != nil {
+		return link.Link{}, err
+	}
+
+	linkType, err := link.TypeFromInt(args.LinkType)
+	if err != nil {
+		return link.Link{}, err
+	}
+
+	return link.Restore(id, args.URL, linkType, args.ChatID), nil
 }

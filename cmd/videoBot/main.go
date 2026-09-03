@@ -4,7 +4,9 @@ import (
 	"VideoBot/internal/link"
 	"VideoBot/internal/platform"
 	"VideoBot/internal/producer"
+	"VideoBot/internal/storage/pg"
 	"VideoBot/internal/telegram"
+	"VideoBot/internal/worker"
 	"context"
 	"fmt"
 	"log/slog"
@@ -56,7 +58,8 @@ func run(log *slog.Logger) error {
 
 	sender := telegram.NewSender(log)
 
-	workers := platform.RegisterCdnUrlWorkers(log, sender)
+	workers := river.NewWorkers()
+	river.AddWorker(workers, worker.NewSenderWorker(log, sender))
 
 	riverClient, err := platform.NewRiver(pool, &river.Config{
 		Queues: map[string]river.QueueConfig{
@@ -84,9 +87,10 @@ func run(log *slog.Logger) error {
 		return fmt.Errorf("create river producer client: %w", err)
 	}
 
-	linkRepo := link.NewRepo()
+	linkRepo := pg.NewLinkRepo()
+	transactor := pg.NewTransactor(pool)
 	producerService := producer.New(log, producerRiverClient)
-	linkService := link.NewService(linkRepo, log, pool, producerService)
+	linkService := link.NewService(linkRepo, log, transactor, producerService)
 	handler := telegram.NewHandler(log, linkService, sender)
 
 	b, err := telegram.New(token, handler, log)

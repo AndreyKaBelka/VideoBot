@@ -4,6 +4,7 @@ import (
 	"VideoBot/internal/downloader"
 	"VideoBot/internal/platform"
 	"VideoBot/internal/producer"
+	"VideoBot/internal/worker"
 	"context"
 	"fmt"
 	"log/slog"
@@ -65,7 +66,8 @@ func run(logger *slog.Logger) error {
 	}
 	producerService := producer.New(logger, producerRiverClient)
 
-	workers := platform.RegisterDownloadWorkers(logger, downloaderService, producerService)
+	workers := river.NewWorkers()
+	river.AddWorker(workers, worker.NewDownloadWorker(logger, downloaderService, producerService))
 
 	riverClient, err := platform.NewRiver(pool, &river.Config{
 		Queues: map[string]river.QueueConfig{
