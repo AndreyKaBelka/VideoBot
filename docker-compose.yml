@@ -67,10 +67,7 @@ services:
     restart: unless-stopped
 
   selenium:
-    image: seleniarm/standalone-firefox:latest
-    shm_size: 512m
-    mem_limit: 700m
-    cpus: 1.5
+    image: selenium/standalone-firefox:latest
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:4444/wd/hub/status"]
       interval: 10s

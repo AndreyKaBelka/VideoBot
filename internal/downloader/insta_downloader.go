@@ -12,12 +12,6 @@ import (
 	"github.com/tebeka/selenium"
 )
 
-type CdnUrl string
-
-func (c CdnUrl) String() string {
-	return string(c)
-}
-
 func (d *Service) ExtractCdnUrlFromInsta(ctx context.Context, link link.Link) (CdnUrl, error) {
 	if err := d.wd.Get(link.Link()); err != nil {
 		return "", err

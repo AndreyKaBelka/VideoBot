@@ -22,6 +22,7 @@ func (LinkJobArgs) InsertOpts() river.InsertOpts {
 type CdnUrlArgs struct {
 	CdnUrl string `json:"cdn_url"`
 	ChatID int64  `json:"chat_id"`
+	Error  string `json:"error"`
 }
 
 func (CdnUrlArgs) Kind() string { return "cdn_url_job" }
