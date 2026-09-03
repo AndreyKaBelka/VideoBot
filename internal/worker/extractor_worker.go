@@ -16,7 +16,6 @@ type JobProducer interface {
 
 type Extractor interface {
 	ExtractCdnUrlFromInsta(ctx context.Context, link link2.Link) (downloader.CdnUrl, error)
-	ExtractCdnUrlFromTiktok(ctx context.Context, link link2.Link) (downloader.CdnUrl, error)
 }
 
 type DownloadWorker struct {
@@ -33,17 +32,25 @@ func NewDownloadWorker(logger *slog.Logger, extractor Extractor, producer JobPro
 func (w *DownloadWorker) Work(ctx context.Context, job *river.Job[taskqueue.LinkJobArgs]) error {
 	link := link2.NewLinkFromArgs(job.Args)
 
-	var videoUrl downloader.CdnUrl
-	var err error
-	if link.LinkType() == link2.INSTA {
-		videoUrl, err = w.extractor.ExtractCdnUrlFromInsta(ctx, link)
-	} else if link.LinkType() == link2.TIKTOK {
-		w.logger.Info("Начал выгрузку из тикитока")
-		videoUrl, err = w.extractor.ExtractCdnUrlFromTiktok(ctx, link)
+	if link.LinkType() != link2.INSTA {
+		w.logger.Error("Неподдерживаемый тип ссылки", "type", link.LinkType().Int())
+		if err := w.producer.SendCdnUrl(ctx, taskqueue.CdnUrlArgs{
+			ChatID: link.ChatId(),
+			Error:  link2.ErrNotSupported.Error(),
+		}); err != nil {
+			w.logger.Error("Чтото случилось", "err", err)
+		}
+		return nil
 	}
+
+	videoUrl, err := w.extractor.ExtractCdnUrlFromInsta(ctx, link)
 
 	if err != nil {
 		w.logger.Error("Чтото случилось", "err", err)
+		err = w.producer.SendCdnUrl(ctx, taskqueue.CdnUrlArgs{
+			ChatID: link.ChatId(),
+			Error:  err.Error(),
+		})
 		return nil
 	}
 

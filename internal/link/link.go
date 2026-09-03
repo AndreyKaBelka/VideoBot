@@ -13,8 +13,7 @@ import (
 type Type int
 
 const (
-	TIKTOK Type = iota
-	INSTA
+	INSTA Type = iota
 )
 
 func (t Type) Int() int {
@@ -92,13 +91,6 @@ func getLinkWithType(link string, chatId int64) (Link, error) {
 			linkType: INSTA,
 			chatId:   chatId,
 		}, nil
-	} else if isTikTokURL(link) {
-		return Link{
-			id:       ID(id),
-			link:     link,
-			linkType: TIKTOK,
-			chatId:   chatId,
-		}, nil
 	}
 	return Link{}, ErrNotSupported
 }
@@ -106,17 +98,6 @@ func getLinkWithType(link string, chatId int64) (Link, error) {
 func isInstagramURL(url string) bool {
 	// Регулярное выражение для проверки ссылок Instagram
 	pattern := `^(https?:\/\/)?(www\.)?(instagram\.com|instagr\.am)\/([a-zA-Z0-9_\.]+)`
-
-	matched, err := regexp.MatchString(pattern, url)
-	if err != nil {
-		return false
-	}
-
-	return matched
-}
-
-func isTikTokURL(url string) bool {
-	pattern := `^(https?:\/\/)?(www\.)?(tiktok\.com|vm\.tiktok\.com|vt\.tiktok\.com)\/([@a-zA-Z0-9_\-\.]+\/)?([a-zA-Z0-9_\-\.\/?&=]+)?$`
 
 	matched, err := regexp.MatchString(pattern, url)
 	if err != nil {
